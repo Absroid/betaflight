@@ -26,7 +26,7 @@
 
 #include "sensors/esc_sensor.h"
 
-#define OSD_NUM_TIMER_TYPES 3
+#define OSD_NUM_TIMER_TYPES 4
 extern const char * const osdTimerSourceNames[OSD_NUM_TIMER_TYPES];
 
 #define OSD_ELEMENT_BUFFER_LENGTH 32
@@ -126,6 +126,8 @@ typedef enum {
     OSD_STICK_OVERLAY_RIGHT,
     OSD_DISPLAY_NAME,
     OSD_ESC_RPM_FREQ,
+    OSD_RATE_PROFILE_NAME,
+    OSD_PID_PROFILE_NAME,
     OSD_ITEM_COUNT // MUST BE LAST
 } osd_items_e;
 
@@ -159,6 +161,9 @@ typedef enum {
     OSD_STAT_MIN_LINK_QUALITY,
     OSD_STAT_FLIGHT_DISTANCE,
     OSD_STAT_MAX_FFT,
+    OSD_STAT_TOTAL_FLIGHTS,
+    OSD_STAT_TOTAL_TIME,
+    OSD_STAT_TOTAL_DIST,
     OSD_STAT_COUNT // MUST BE LAST
 } osd_stats_e;
 
@@ -180,6 +185,7 @@ typedef enum {
     OSD_TIMER_SRC_ON,
     OSD_TIMER_SRC_TOTAL_ARMED,
     OSD_TIMER_SRC_LAST_ARMED,
+    OSD_TIMER_SRC_ON_OR_ARMED,
     OSD_TIMER_SRC_COUNT
 } osd_timer_source_e;
 
@@ -216,6 +222,8 @@ STATIC_ASSERT(OSD_WARNING_COUNT <= 32, osdwarnings_overflow);
 #define ESC_CURRENT_ALARM_OFF -1
 
 #define OSD_GPS_RESCUE_DISABLED_WARNING_DURATION_US 3000000 // 3 seconds
+
+extern const uint16_t osdTimerDefault[OSD_TIMER_COUNT];
 
 typedef struct osdConfig_s {
     uint16_t item_pos[OSD_ITEM_COUNT];

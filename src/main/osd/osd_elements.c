@@ -68,6 +68,7 @@
 #include "drivers/vtx_common.h"
 
 #include "fc/config.h"
+#include "fc/controlrate_profile.h"
 #include "fc/core.h"
 #include "fc/rc_adjustments.h"
 #include "fc/rc_controls.h"
@@ -81,6 +82,7 @@
 #include "flight/imu.h"
 #include "flight/mixer.h"
 #include "flight/pid.h"
+#include "flight/rpm_filter.h"
 
 #include "io/beeper.h"
 #include "io/gps.h"
@@ -100,7 +102,6 @@
 #include "sensors/battery.h"
 #include "sensors/esc_sensor.h"
 #include "sensors/sensors.h"
-#include "sensors/rpm_filter.h"
 
 
 #define AH_SYMBOL_COUNT 9
@@ -166,15 +167,15 @@ static int getEscRpm(int i)
     if (motorConfig()->dev.useDshotTelemetry) {
         return 100.0f / (motorConfig()->motorPoleCount / 2.0f) * getDshotTelemetry(i);
     }
-#endif 
+#endif
     if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
         return calcEscRpm(getEscSensorData(i)->rpm);
-    } else { 
+    } else {
         return 0;
     }
 }
 
-static int getEscRpmFreq(int i) 
+static int getEscRpmFreq(int i)
 {
     return getEscRpm(i) / 60;
 }
@@ -187,7 +188,7 @@ static void renderOsdEscRpmOrFreq(getEscRpmOrFreqFnPtr escFnPtr, osdElementParms
         char rpmStr[6];
         const int rpm = MIN((*escFnPtr)(i),99999);
         const int len = tfp_sprintf(rpmStr, "%d", rpm);
-        rpmStr[len] = '\0'; 
+        rpmStr[len] = '\0';
         displayWrite(element->osdDisplayPort, x, y + i, rpmStr);
     }
     element->drawElement = false;
@@ -210,9 +211,9 @@ static void osdFormatAltitudeString(char * buff, int32_t altitudeCm)
 {
     const int alt = osdGetMetersToSelectedUnit(altitudeCm) / 10;
 
-    tfp_sprintf(buff, "%5d %c", alt, osdGetMetersToSelectedUnitSymbol());
-    buff[5] = buff[4];
-    buff[4] = '.';
+    tfp_sprintf(buff, "%c%5d %c", SYM_ALTITUDE, alt, osdGetMetersToSelectedUnitSymbol());
+    buff[6] = buff[5];
+    buff[5] = '.';
 }
 
 #ifdef USE_GPS
@@ -296,6 +297,8 @@ static char osdGetTimerSymbol(osd_timer_source_e src)
     case OSD_TIMER_SRC_TOTAL_ARMED:
     case OSD_TIMER_SRC_LAST_ARMED:
         return SYM_FLY_M;
+    case OSD_TIMER_SRC_ON_OR_ARMED:
+        return ARMING_FLAG(ARMED) ? SYM_FLY_M : SYM_ON_M;
     default:
         return ' ';
     }
@@ -312,6 +315,8 @@ static timeUs_t osdGetTimerValue(osd_timer_source_e src)
         statistic_t *stats = osdGetStats();
         return stats->armed_time;
     }
+    case OSD_TIMER_SRC_ON_OR_ARMED:
+        return ARMING_FLAG(ARMED) ? osdFlyTime : micros();
     default:
         return 0;
     }
@@ -472,7 +477,7 @@ static void osdElementAltitude(osdElementParms_t *element)
 static void osdElementAngleRollPitch(osdElementParms_t *element)
 {
     const int angle = (element->item == OSD_PITCH_ANGLE) ? attitude.values.pitch : attitude.values.roll;
-    tfp_sprintf(element->buff, "%c%02d.%01d", angle < 0 ? '-' : ' ', abs(angle / 10), abs(angle % 10));
+    tfp_sprintf(element->buff, "%c%c%02d.%01d", (element->item == OSD_PITCH_ANGLE) ? SYM_PITCH : SYM_ROLL , angle < 0 ? '-' : ' ', abs(angle / 10), abs(angle % 10));
 }
 #endif
 
@@ -526,7 +531,7 @@ static void osdElementCompassBar(osdElementParms_t *element)
 #ifdef USE_ADC_INTERNAL
 static void osdElementCoreTemperature(osdElementParms_t *element)
 {
-    tfp_sprintf(element->buff, "%3d%c", osdConvertTemperatureToSelectedUnit(getCoreTemperatureCelsius()), osdGetTemperatureSymbolForSelectedUnit());
+    tfp_sprintf(element->buff, "C%c%3d%c", SYM_TEMPERATURE, osdConvertTemperatureToSelectedUnit(getCoreTemperatureCelsius()), osdGetTemperatureSymbolForSelectedUnit());
 }
 #endif // USE_ADC_INTERNAL
 
@@ -643,11 +648,47 @@ static void osdElementDisplayName(osdElementParms_t *element)
     }
 }
 
+#ifdef USE_PROFILE_NAMES
+static void osdElementRateProfileName(osdElementParms_t *element)
+{
+    if (strlen(currentControlRateProfile->profileName) == 0) {
+        tfp_sprintf(element->buff, "RATE_%u", getCurrentControlRateProfileIndex() + 1);
+    } else {
+        unsigned i;
+        for (i = 0; i < MAX_PROFILE_NAME_LENGTH; i++) {
+            if (currentControlRateProfile->profileName[i]) {
+                element->buff[i] = toupper((unsigned char)currentControlRateProfile->profileName[i]);
+            } else {
+                break;
+            }
+        }
+        element->buff[i] = '\0';
+    }
+}
+
+static void osdElementPidProfileName(osdElementParms_t *element)
+{
+    if (strlen(currentPidProfile->profileName) == 0) {
+        tfp_sprintf(element->buff, "PID_%u", getCurrentPidProfileIndex() + 1);
+    } else {
+        unsigned i;
+        for (i = 0; i < MAX_PROFILE_NAME_LENGTH; i++) {
+            if (currentPidProfile->profileName[i]) {
+                element->buff[i] = toupper((unsigned char)currentPidProfile->profileName[i]);
+            } else {
+                break;
+            }
+        }
+        element->buff[i] = '\0';
+    }
+}
+#endif
+
 #ifdef USE_ESC_SENSOR
 static void osdElementEscTemperature(osdElementParms_t *element)
 {
     if (featureIsEnabled(FEATURE_ESC_SENSOR)) {
-        tfp_sprintf(element->buff, "%3d%c", osdConvertTemperatureToSelectedUnit(osdEscDataCombined->temperature), osdGetTemperatureSymbolForSelectedUnit());
+        tfp_sprintf(element->buff, "E%c%3d%c", SYM_TEMPERATURE, osdConvertTemperatureToSelectedUnit(osdEscDataCombined->temperature), osdGetTemperatureSymbolForSelectedUnit());
     }
 }
 #endif // USE_ESC_SENSOR
@@ -738,26 +779,23 @@ static void osdElementGpsHomeDistance(osdElementParms_t *element)
 {
     if (STATE(GPS_FIX) && STATE(GPS_FIX_HOME)) {
         const int32_t distance = osdGetMetersToSelectedUnit(GPS_distanceToHome);
-        tfp_sprintf(element->buff, "%d%c", distance, osdGetMetersToSelectedUnitSymbol());
+        tfp_sprintf(element->buff, "%c%d%c", SYM_HOMEFLAG, distance, osdGetMetersToSelectedUnitSymbol());
     } else {
+        element->buff[0] = SYM_HOMEFLAG;
         // We use this symbol when we don't have a FIX
-        element->buff[0] = SYM_COLON;
-        // overwrite any previous distance with blanks
-        memset(element->buff + 1, SYM_BLANK, 6);
-        element->buff[7] = '\0';
+        element->buff[1] = SYM_COLON;
+        element->buff[2] = '\0';
     }
 }
 
 static void osdElementGpsLatitude(osdElementParms_t *element)
 {
-    // The SYM_LAT symbol in the actual font contains only blank, so we use the SYM_ARROW_NORTH
-    osdFormatCoordinate(element->buff, SYM_ARROW_NORTH, gpsSol.llh.lat);
+    osdFormatCoordinate(element->buff, SYM_LAT, gpsSol.llh.lat);
 }
 
 static void osdElementGpsLongitude(osdElementParms_t *element)
 {
-    // The SYM_LON symbol in the actual font contains only blank, so we use the SYM_ARROW_EAST
-    osdFormatCoordinate(element->buff, SYM_ARROW_EAST, gpsSol.llh.lon);
+    osdFormatCoordinate(element->buff, SYM_LON, gpsSol.llh.lon);
 }
 
 static void osdElementGpsSats(osdElementParms_t *element)
@@ -806,11 +844,11 @@ static void osdElementLogStatus(osdElementParms_t *element)
 {
     if (IS_RC_MODE_ACTIVE(BOXBLACKBOX)) {
         if (!isBlackboxDeviceWorking()) {
-            tfp_sprintf(element->buff, "L-");
+            tfp_sprintf(element->buff, "%c!", SYM_BBLOG);
         } else if (isBlackboxDeviceFull()) {
-            tfp_sprintf(element->buff, "L>");
+            tfp_sprintf(element->buff, "%c>", SYM_BBLOG);
         } else {
-            tfp_sprintf(element->buff, "L%d", blackboxGetLogNumber());
+            tfp_sprintf(element->buff, "%c%d", SYM_BBLOG, blackboxGetLogNumber());
         }
     }
 }
@@ -1177,7 +1215,7 @@ static void osdElementWarnings(osdElementParms_t *element)
     const int16_t coreTemperature = getCoreTemperatureCelsius();
     if (osdWarnGetState(OSD_WARNING_CORE_TEMPERATURE) && coreTemperature >= osdConfig()->core_temp_alarm) {
         char coreTemperatureWarningMsg[OSD_FORMAT_MESSAGE_BUFFER_SIZE];
-        tfp_sprintf(coreTemperatureWarningMsg, "CORE: %3d%c", osdConvertTemperatureToSelectedUnit(coreTemperature), osdGetTemperatureSymbolForSelectedUnit());
+        tfp_sprintf(coreTemperatureWarningMsg, "CORE %c: %3d%c", SYM_TEMPERATURE, osdConvertTemperatureToSelectedUnit(coreTemperature), osdGetTemperatureSymbolForSelectedUnit());
 
         osdFormatMessage(element->buff, OSD_FORMAT_MESSAGE_BUFFER_SIZE, coreTemperatureWarningMsg);
         SET_BLINK(OSD_WARNINGS);
@@ -1331,6 +1369,10 @@ static const uint8_t osdElementDisplayOrder[] = {
     OSD_STICK_OVERLAY_LEFT,
     OSD_STICK_OVERLAY_RIGHT,
 #endif
+#ifdef USE_PROFILE_NAMES
+    OSD_RATE_PROFILE_NAME,
+    OSD_PID_PROFILE_NAME,
+#endif
 };
 
 // Define the mapping between the OSD element id and the function to draw it
@@ -1426,6 +1468,11 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
 #if defined(USE_RPM_FILTER) || defined(USE_ESC_SENSOR)
     [OSD_ESC_RPM_FREQ]            = osdElementEscRpmFreq,
 #endif
+#ifdef USE_PROFILE_NAMES
+    [OSD_RATE_PROFILE_NAME]       = osdElementRateProfileName,
+    [OSD_PID_PROFILE_NAME]        = osdElementPidProfileName,
+#endif
+
 };
 
 static void osdAddActiveElement(osd_items_e element)

@@ -29,7 +29,6 @@
 //#pragma GCC diagnostic warning "-Wpadded"
 
 //#define SCHEDULER_DEBUG // define this to use scheduler debug[] values. Undefined by default for performance reasons
-#define DEBUG_MODE DEBUG_NONE // change this to change initial debug mode
 
 #define I2C1_OVERCLOCK true
 #define I2C2_OVERCLOCK true
@@ -98,6 +97,10 @@
 //#define USE_SPI_TRANSACTION
 #endif // STM32F7
 
+#ifdef STM32H7
+#define USE_USB_CDC_HID
+#endif
+
 #if defined(STM32F4) || defined(STM32F7)
 #define TASK_GYROPID_DESIRED_PERIOD     125 // 125us = 8kHz
 #define SCHEDULER_DELAY_LIMIT           10
@@ -140,6 +143,10 @@
 #endif
 
 #define USE_BRUSHED_ESC_AUTODETECT  // Detect if brushed motors are connected and set defaults appropriately to avoid motors spinning on boot
+
+#define USE_PWM_OUTPUT
+#define USE_DMA
+#define USE_TIMER
 
 #define USE_CLI
 #define USE_SERIAL_PASSTHROUGH
@@ -273,6 +280,7 @@
 #define USE_RX_MSP
 //#define USE_ESC_SENSOR_INFO
 //#define USE_CRSF_CMS_TELEMETRY
+//#define USE_CRSF_LINK_STATISTICS
 #endif
 
 #endif // FLASH_SIZE > 128
@@ -311,7 +319,7 @@
 #define USE_CMS_GPS_RESCUE_MENU
 #define USE_SMART_FEEDFORWARD
 #define USE_TELEMETRY_SENSORS_DISABLED_DETAILS
-// Re-enable this after 4.0 has been released, and remove the define from STM32F4DISCOVERY
-//#define USE_VTX_TABLE
+#define USE_VTX_TABLE
 #define USE_PERSISTENT_STATS
+#define USE_PROFILE_NAMES
 #endif

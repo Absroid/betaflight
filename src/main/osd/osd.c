@@ -62,8 +62,11 @@
 #include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
 
-#include "flight/position.h"
+#if defined(USE_GYRO_DATA_ANALYSE)
+#include "flight/gyroanalyse.h"
+#endif
 #include "flight/imu.h"
+#include "flight/position.h"
 
 #include "io/asyncfatfs/asyncfatfs.h"
 #include "io/beeper.h"
@@ -75,6 +78,7 @@
 
 #include "pg/pg.h"
 #include "pg/pg_ids.h"
+#include "pg/stats.h"
 
 #include "rx/rx.h"
 
@@ -82,9 +86,6 @@
 #include "sensors/battery.h"
 #include "sensors/esc_sensor.h"
 #include "sensors/sensors.h"
-#if defined(USE_GYRO_DATA_ANALYSE)
-#include "sensors/gyroanalyse.h"
-#endif
 
 #ifdef USE_HARDWARE_REVISION_DETECTION
 #include "hardware_revision.h"
@@ -93,7 +94,8 @@
 const char * const osdTimerSourceNames[] = {
     "ON TIME  ",
     "TOTAL ARM",
-    "LAST ARM "
+    "LAST ARM ",
+    "ON/ARM   "
 };
 
 // Things in both OSD and CMS
@@ -120,6 +122,7 @@ static uint8_t osdProfile = 1;
 static displayPort_t *osdDisplayPort;
 
 static bool suppressStatsDisplay = false;
+static uint8_t osdStatsRowCount = 0;
 
 #ifdef USE_ESC_SENSOR
 escSensorData_t *osdEscDataCombined;
@@ -197,6 +200,11 @@ static void osdDrawElements(timeUs_t currentTimeUs)
     osdDrawActiveElements(osdDisplayPort, currentTimeUs);
 }
 
+const uint16_t osdTimerDefault[OSD_TIMER_COUNT] = {
+        OSD_TIMER(OSD_TIMER_SRC_ON, OSD_TIMER_PREC_SECOND, 10),
+        OSD_TIMER(OSD_TIMER_SRC_TOTAL_ARMED, OSD_TIMER_PREC_SECOND, 10)
+};
+
 void pgResetFn_osdConfig(osdConfig_t *osdConfig)
 {
     // Position elements near centre of screen and disabled by default
@@ -237,8 +245,8 @@ void pgResetFn_osdConfig(osdConfig_t *osdConfig)
     osdWarnSetState(OSD_WARNING_RSSI, false);
     osdWarnSetState(OSD_WARNING_LINK_QUALITY, false);
 
-    osdConfig->timers[OSD_TIMER_1] = OSD_TIMER(OSD_TIMER_SRC_ON, OSD_TIMER_PREC_SECOND, 10);
-    osdConfig->timers[OSD_TIMER_2] = OSD_TIMER(OSD_TIMER_SRC_TOTAL_ARMED, OSD_TIMER_PREC_SECOND, 10);
+    osdConfig->timers[OSD_TIMER_1] = osdTimerDefault[OSD_TIMER_1];
+    osdConfig->timers[OSD_TIMER_2] = osdTimerDefault[OSD_TIMER_2];
 
     osdConfig->overlay_radio_mode = 2;
 
@@ -466,13 +474,26 @@ static bool isSomeStatEnabled(void)
 // on the stats screen will have to be more beneficial than the hassle of not matching exactly to the
 // configurator list.
 
-static void osdShowStats(uint16_t endBatteryVoltage)
+static uint8_t osdShowStats(uint16_t endBatteryVoltage, int statsRowCount)
 {
-    uint8_t top = 2;
+    uint8_t top = 0;
     char buff[OSD_ELEMENT_BUFFER_LENGTH];
+    bool displayLabel = false;
 
-    displayClearScreen(osdDisplayPort);
-    displayWrite(osdDisplayPort, 2, top++, "  --- STATS ---");
+    // if statsRowCount is 0 then we're running an initial analysis of the active stats items
+    if (statsRowCount > 0) {
+        const int availableRows = osdDisplayPort->rows;
+        int displayRows = MIN(statsRowCount, availableRows);
+        if (statsRowCount < availableRows) {
+            displayLabel = true;
+            displayRows++;
+        }
+        top = (availableRows - displayRows) / 2;  // center the stats vertically
+    }
+
+    if (displayLabel) {
+        displayWrite(osdDisplayPort, 2, top++, "  --- STATS ---");
+    }
 
     if (osdStatGetState(OSD_STAT_RTC_DATE_TIME)) {
         bool success = false;
@@ -545,8 +566,7 @@ static void osdShowStats(uint16_t endBatteryVoltage)
 
     if (batteryConfig()->currentMeterSource != CURRENT_METER_NONE) {
         if (osdStatGetState(OSD_STAT_MAX_CURRENT)) {
-            itoa(stats.max_current, buff, 10);
-            strcat(buff, "A");
+            tfp_sprintf(buff, "%d%c", stats.max_current, SYM_AMP);
             osdDisplayStatisticLabel(top++, "MAX CURRENT", buff);
         }
 
@@ -607,6 +627,43 @@ static void osdShowStats(uint16_t endBatteryVoltage)
         }
     }
 #endif
+
+#ifdef USE_PERSISTENT_STATS
+    if (osdStatGetState(OSD_STAT_TOTAL_FLIGHTS)) {
+        itoa(statsConfig()->stats_total_flights, buff, 10);
+        osdDisplayStatisticLabel(top++, "TOTAL FLIGHTS", buff);
+    }
+    if (osdStatGetState(OSD_STAT_TOTAL_TIME)) {
+        int minutes = statsConfig()->stats_total_time_s / 60;
+        tfp_sprintf(buff, "%d:%02dH", minutes / 60, minutes % 60);
+        osdDisplayStatisticLabel(top++, "TOTAL FLIGHT TIME", buff);
+    }
+    if (osdStatGetState(OSD_STAT_TOTAL_DIST)) {
+        #define METERS_PER_KILOMETER 1000
+        #define METERS_PER_MILE      1609
+        if (osdConfig()->units == OSD_UNIT_IMPERIAL) {
+            tfp_sprintf(buff, "%dMI", statsConfig()->stats_total_dist_m / METERS_PER_MILE);
+        } else {
+            tfp_sprintf(buff, "%dKM", statsConfig()->stats_total_dist_m / METERS_PER_KILOMETER);
+        }
+        osdDisplayStatisticLabel(top++, "TOTAL DISTANCE", buff);
+    }
+#endif
+    return top;
+}
+
+static void osdRefreshStats(uint16_t endBatteryVoltage)
+{
+    displayClearScreen(osdDisplayPort);
+    if (osdStatsRowCount == 0) {
+        // No stats row count has been set yet.
+        // Go through the logic one time to determine how many stats are actually displayed.
+        osdStatsRowCount = osdShowStats(endBatteryVoltage, 0);
+        // Then clear the screen and commence with normal stats display which will
+        // determine if the heading should be displayed and also center the content vertically.
+        displayClearScreen(osdDisplayPort);
+    }
+    osdShowStats(endBatteryVoltage, osdStatsRowCount);
 }
 
 static void osdShowArmed(void)
@@ -638,6 +695,7 @@ STATIC_UNIT_TESTED void osdRefresh(timeUs_t currentTimeUs)
             osdStatsEnabled = true;
             resumeRefreshAt = currentTimeUs + (60 * REFRESH_1S);
             endBatteryVoltage = getBatteryVoltage();
+            osdStatsRowCount = 0; // reset to 0 so it will be recalculated on the next stats refresh
         }
 
         armState = ARMING_FLAG(ARMED);
@@ -665,7 +723,7 @@ STATIC_UNIT_TESTED void osdRefresh(timeUs_t currentTimeUs)
                 }
                 if (currentTimeUs >= osdStatsRefreshTimeUs) {
                     osdStatsRefreshTimeUs = currentTimeUs + REFRESH_1S;
-                    osdShowStats(endBatteryVoltage);
+                    osdRefreshStats(endBatteryVoltage);
                 }
             }
         }
