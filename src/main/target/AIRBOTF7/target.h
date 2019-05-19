@@ -20,13 +20,13 @@
 
 #pragma once
 
-#define TARGET_BOARD_IDENTIFIER "O4V7"
-#define USBD_PRODUCT_STRING     "OmnibusF4 Nano V7"
+#define TARGET_BOARD_IDENTIFIER "ABF7"
+#define USBD_PRODUCT_STRING     "Airbot-F7"
 
 #define LED0_PIN                PB12
 
 #define USE_BEEPER
-#define BEEPER_PIN              PC5
+#define BEEPER_PIN              PB0
 #define BEEPER_INVERTED
 
 #define ENABLE_DSHOT_DMAR       true
@@ -38,24 +38,26 @@
 #define SPI3_SCK_PIN            PB3
 #define SPI3_MISO_PIN           PB4
 #define SPI3_MOSI_PIN           PB5
+#define SPI3_NSS_PIN            PD2
 
 #define USE_GYRO
-#define USE_GYRO_SPI_MPU6500
 #define USE_GYRO_SPI_MPU6000
+#define USE_GYRO_SPI_MPU6500
 
-#define USE_ACC
-#define USE_ACC_SPI_MPU6500
-#define USE_ACC_SPI_MPU6000
-
-#define GYRO_1_CS_PIN           PD2
 #define GYRO_1_SPI_INSTANCE     SPI3
+#define GYRO_1_CS_PIN           SPI3_NSS_PIN
+#define GYRO_1_ALIGN            CW90_DEG
 #define GYRO_1_EXTI_PIN         NONE
-#define GYRO_1_ALIGN            CW0_DEG
 
-#define GYRO_2_CS_PIN           PC4
+
 #define GYRO_2_SPI_INSTANCE     SPI1
+#define GYRO_2_CS_PIN           PC4        
 #define GYRO_2_EXTI_PIN         NONE
 #define GYRO_2_ALIGN            CW0_DEG
+
+#define USE_ACC
+#define USE_ACC_SPI_MPU6000
+#define USE_ACC_SPI_MPU6500
 
 // *************** OSD **************************
 
@@ -78,7 +80,7 @@
 
 #define USE_FLASHFS
 #define USE_FLASH_M25P16
-#define FLASH_CS_PIN            PA2
+#define FLASH_CS_PIN            PA3
 #define FLASH_SPI_INSTANCE      SPI1
 #define ENABLE_BLACKBOX_LOGGING_ON_SPIFLASH_BY_DEFAULT
 
@@ -92,7 +94,7 @@
 #define UART1_TX_PIN            PA9
 
 #define USE_UART2
-#define UART2_RX_PIN            PA3
+#define UART2_TX_PIN            PA2
 
 #define USE_UART3
 #define UART3_RX_PIN            PC11
@@ -116,7 +118,11 @@
 
 #define DEFAULT_RX_FEATURE      FEATURE_RX_SERIAL
 #define SERIALRX_PROVIDER       SERIALRX_SBUS
-#define SERIALRX_UART           SERIAL_PORT_USART1
+#define SERIALRX_UART           SERIAL_PORT_USART6
+
+// *************** CAM *****************************
+
+#define CAMERA_CONTROL_PIN      PA8
 
 // *************** I2C *****************************
 
@@ -127,8 +133,10 @@
 
 // *************** ADC *****************************
 #define USE_ADC
+#define ADC3_DMA_STREAM         DMA2_Stream0
 #define VBAT_ADC_PIN            PC0
-#define CURRENT_METER_ADC_PIN   PC1
+#define CURRENT_METER_ADC_PIN   PC2
+#define RSSI_ADC_PIN            PC1
 
 #define DEFAULT_FEATURES        (FEATURE_OSD | FEATURE_TELEMETRY | FEATURE_SOFTSERIAL | FEATURE_AIRMODE)
 #define DEFAULT_VOLTAGE_METER_SOURCE    VOLTAGE_METER_ADC
@@ -136,7 +144,6 @@
 #define CURRENT_METER_SCALE_DEFAULT 179
 
 #define USE_ESCSERIAL
-#define ESCSERIAL_TIMER_TX_PIN  PA3
 #define USE_SERIAL_4WAY_BLHELI_INTERFACE
 
 #define TARGET_IO_PORTA         0xffff
@@ -145,4 +152,4 @@
 #define TARGET_IO_PORTD         0xffff
 
 #define USABLE_TIMER_CHANNEL_COUNT 6
-#define USED_TIMERS             ( TIM_N(1) | TIM_N(2) | TIM_N(4) | TIM_N(8) )
+#define USED_TIMERS             (TIM_N(1)|TIM_N(2)|TIM_N(4)|TIM_N(8))

@@ -18,36 +18,25 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include "platform.h"
-
-#ifdef USE_FLASH_CHIP
-
-#include "drivers/bus_spi.h"
-#include "drivers/bus_quadspi.h"
 #include "drivers/io.h"
 
-#include "pg/pg.h"
-#include "pg/pg_ids.h"
+#include "drivers/dma.h"
+#include "drivers/timer.h"
+#include "drivers/timer_def.h"
 
-#include "flash.h"
+const timerHardware_t timerHardware[USABLE_TIMER_CHANNEL_COUNT] = {
+    DEF_TIM(TIM2, CH1, PA15, TIM_USE_LED,           0, 0), // ONBOARD LED
 
-#ifndef FLASH_CS_PIN
-#define FLASH_CS_PIN NONE
-#endif
+    DEF_TIM(TIM1, CH1, PA8, TIM_USE_ANY,            0, 0), // CAM CONTROL
 
-PG_REGISTER_WITH_RESET_FN(flashConfig_t, flashConfig, PG_FLASH_CONFIG, 0);
+    // MOTORS
 
-void pgResetFn_flashConfig(flashConfig_t *flashConfig)
-{
-    flashConfig->csTag = IO_TAG(FLASH_CS_PIN);
-#if defined(USE_SPI) && defined(FLASH_SPI_INSTANCE)
-    flashConfig->spiDevice = SPI_DEV_TO_CFG(spiDeviceByInstance(FLASH_SPI_INSTANCE));
-#endif
-#if defined(USE_QUADSPI) && defined(FLASH_QUADSPI_INSTANCE)
-    flashConfig->quadSpiDevice = QUADSPI_DEV_TO_CFG(quadSpiDeviceByInstance(FLASH_QUADSPI_INSTANCE));
-#endif
-}
-#endif
+    DEF_TIM(TIM8, CH3, PC8,  TIM_USE_MOTOR,         0, 0), //S1
+    DEF_TIM(TIM4, CH1, PB6,  TIM_USE_MOTOR,         0, 0), //S2
+    DEF_TIM(TIM8, CH4, PC9,  TIM_USE_MOTOR,         0, 0), //S3
+    DEF_TIM(TIM4, CH2, PB7,  TIM_USE_MOTOR,         0, 0), //S4
+
+};

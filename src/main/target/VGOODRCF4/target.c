@@ -18,36 +18,24 @@
  * If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdbool.h>
 #include <stdint.h>
 
 #include "platform.h"
-
-#ifdef USE_FLASH_CHIP
-
-#include "drivers/bus_spi.h"
-#include "drivers/bus_quadspi.h"
 #include "drivers/io.h"
 
-#include "pg/pg.h"
-#include "pg/pg_ids.h"
+#include "drivers/dma.h"
+#include "drivers/timer.h"
+#include "drivers/timer_def.h"
 
-#include "flash.h"
+const timerHardware_t timerHardware[USABLE_TIMER_CHANNEL_COUNT] = {
+    DEF_TIM(TIM8, CH2, PC7,  TIM_USE_PPM, 0, 0), // PPM
 
-#ifndef FLASH_CS_PIN
-#define FLASH_CS_PIN NONE
-#endif
+    DEF_TIM(TIM1, CH2, PA9,  TIM_USE_MOTOR, 0, 0), // S1
+    DEF_TIM(TIM1, CH4, PA10,  TIM_USE_MOTOR, 0, 0), // S2
+    DEF_TIM(TIM3, CH3, PB0,  TIM_USE_MOTOR, 0, 0), // S3
+    DEF_TIM(TIM3, CH4, PB1,  TIM_USE_MOTOR, 0, 0), // S4
+    DEF_TIM(TIM8, CH3, PC8, TIM_USE_MOTOR, 0, 0), // S5
+    DEF_TIM(TIM8, CH4, PC9,  TIM_USE_MOTOR | TIM_USE_CAMERA_CONTROL, 0, 0), // S6 | TIM_USE_CAMERA_CONTROL
 
-PG_REGISTER_WITH_RESET_FN(flashConfig_t, flashConfig, PG_FLASH_CONFIG, 0);
-
-void pgResetFn_flashConfig(flashConfig_t *flashConfig)
-{
-    flashConfig->csTag = IO_TAG(FLASH_CS_PIN);
-#if defined(USE_SPI) && defined(FLASH_SPI_INSTANCE)
-    flashConfig->spiDevice = SPI_DEV_TO_CFG(spiDeviceByInstance(FLASH_SPI_INSTANCE));
-#endif
-#if defined(USE_QUADSPI) && defined(FLASH_QUADSPI_INSTANCE)
-    flashConfig->quadSpiDevice = QUADSPI_DEV_TO_CFG(quadSpiDeviceByInstance(FLASH_QUADSPI_INSTANCE));
-#endif
-}
-#endif
+    DEF_TIM(TIM1, CH1, PA8,  TIM_USE_LED, 0, 1), //LED_STRIP
+};
