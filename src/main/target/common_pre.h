@@ -288,6 +288,7 @@
 #define USE_ESC_SENSOR_INFO
 #define USE_CRSF_CMS_TELEMETRY
 #define USE_CRSF_LINK_STATISTICS
+#define USE_RX_RSSI_DBM
 #endif
 
 #endif // FLASH_SIZE > 128
